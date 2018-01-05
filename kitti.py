@@ -1,5 +1,6 @@
 import numpy as np
 from natsort import *
+from tqdm import *
 import datetime as dt
 import matplotlib.pyplot as plt
 import glob
@@ -12,38 +13,55 @@ class kitti:
         self.sequences = natsorted(next(os.walk(self.base_dir))[1])
         self.list_of_velo_files = []
         self.list_of_images = []
-        self.range={'x':[0,60],'y':[-20,20]}
+        self.velo_range={'x':[0,60],'y':[-20,20]}
         self.create_list_of_velo_files()
-
+        self.clip_ground = True
+        self.clip_ground_value = -1.7
+        self.save_dir = './velo_scans/'
     def parse(self):
         pass
-
     def read_tracklet(self):
         pass
 
     def project_frame_2d(self,scan_points,range=None):
         if range== None:
-            range=self.range
-        scan_points_projected = scan_points[scan_points[:,0]>range['x'][0],:2]
+            range=self.velo_range
+        else:
+            self.velo_range =range
+        scan_points_projected = scan_points[scan_points[:,0]>range['x'][0],:3]
 
-        scan_points_projected = scan_points_projected[scan_points_projected[:,0]<range['x'][1] , :2]
+        scan_points_projected = scan_points_projected[scan_points_projected[:,0]<range['x'][1] , :3]
 
-        scan_points_projected = scan_points_projected[scan_points_projected[:,1]>range['y'][0] , :2]
+        scan_points_projected = scan_points_projected[scan_points_projected[:,1]>range['y'][0] , :3]
 
-        scan_points_projected = scan_points_projected[scan_points_projected[:,1]<range['y'][1] , :2]
+        scan_points_projected = scan_points_projected[scan_points_projected[:,1]<range['y'][1] , :3]
+
+        if self.clip_ground:
+            scan_points_projected = scan_points_projected[scan_points_projected[:, 2] > self.clip_ground_value, :2]
+        else :
+            scan_points_projected = scan_points_projected[:, :2]
 
         return scan_points_projected
-    def save_scan_point(self,scan_points,type='png'):
+    def save_scan_points(self,type):
+        scanpoint_gen = self.get_velo_scans()
+        for i in tqdm(range (len(self.list_of_velo_files))):
+            scanpoints= self.project_frame_2d(next(scanpoint_gen))
+            self.save_one_scan_(scanpoints,str(i),type=type)
+
+    def save_one_scan_(self,scan_points,filename,type='png'):
         to_be_saved = np.zeros([600,400])
         if type == 'npy':
             pass
         elif type == 'png':
             for i in range (len(scan_points)):
-                x=int((self.range['x'][1]- scan_points[i][0])/0.1)
-                y=int((self.range['y'][0]+ scan_points[i][1])/0.1)
-                to_be_saved[x][y]=1
+                x=int((self.velo_range['x'][1]- scan_points[i][0])/0.1)
+                y=int((self.velo_range['y'][0]- scan_points[i][1])/0.1)
+                try:
+                    to_be_saved[x][y]=1
+                except:
+                    pass
+            plt.imsave(self.save_dir+filename+'.png',to_be_saved)
 
-        plt.imsave('testimage.png',to_be_saved)
     def extract_sequence_2d(self):
         pass
 
@@ -71,7 +89,4 @@ class kitti:
 
 print("hello kitti")
 dataset=kitti()
-scanpoint =next(dataset.get_velo_scans())
-n= (dataset.project_frame_2d(scanpoint))
-print(np.min(n[:,1]))
-dataset.save_scan_point(n)
+dataset.save_scan_points('png')
