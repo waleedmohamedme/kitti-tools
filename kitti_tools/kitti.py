@@ -10,8 +10,7 @@ from common import parseTrackletXML as xmlParser
 
 class kitti:
     def __init__(self):
-        self.base_dir='/media/waleed/work/data/kitti/raw/2011_09_26/'
-        self.sequences = natsorted(next(os.walk(self.base_dir))[1])
+        self.base_dir='/media/waleed/work/data/kitti/raw/mini/'
         self.list_of_velo_files = []
         self.list_of_images = []
         self.list_tracklets = {}
@@ -24,6 +23,7 @@ class kitti:
         self.resolution = 0.1
         self.annotation = None
     def build(self):
+        self.sequences = natsorted(next(os.walk(self.base_dir))[1])
         self.create_list_of_velo_files()
         self.create_list_of_rgb_files()
         print("[info] parsing tracklet files this may take moments ... ")
@@ -96,6 +96,14 @@ class kitti:
                 label['velo_ymin']=np.min(y)
                 label['velo_xmax']=np.max(x)
                 label['velo_ymax']=np.max(y)
+                #####
+                ### we flip the image to match the rgb prespective
+                ### we use switch x and y due to image axis
+                ######
+                label['proj_velo_ymin']=int(np.abs(self.velo_range['x'][1]-self.velo_range['x'][0])/self.resolution)-np.min(x)
+                label['proj_velo_xmin']=int(np.abs(self.velo_range['y'][1]-self.velo_range['y'][0])/self.resolution)-np.min(y)
+                label['proj_velo_ymax']=int(np.abs(self.velo_range['x'][1]-self.velo_range['x'][0])/self.resolution)-np.max(x)
+                label['proj_velo_xmax']=int(np.abs(self.velo_range['y'][1]-self.velo_range['y'][0])/self.resolution)-np.max(y)
 
                 label_pre_frame[obj_id] = label
                 obj_id += 1
@@ -132,8 +140,8 @@ class kitti:
     def save_one_scan_(self,scan_points,filename):
         to_be_saved = np.zeros([600,400])
         for i in range(len(scan_points)):
-            x = int((self.velo_range['x'][1] - scan_points[i][0]) / self.resolution)
-            y = int((self.velo_range['y'][0] - scan_points[i][1]) / self.resolution)
+            x = int(((self.velo_range['x'][1]-self.velo_range['x'][0]) - scan_points[i][0]) / self.resolution)
+            y = int(((self.velo_range['y'][1]-self.velo_range['y'][0])/2 - scan_points[i][1]) / self.resolution)
             try:
                 to_be_saved[x][y] = 1
             except:
@@ -142,6 +150,16 @@ class kitti:
             np.save(self.save_dir+filename+self.saving_dtype , to_be_saved )
         else:##image formates png or jpg
             plt.imsave(self.save_dir+filename+self.saving_dtype , to_be_saved)
+    def velo_to_image(self,scan_points):
+        to_be_saved = np.zeros([600,400])
+        for i in range(len(scan_points)):
+            x = int(((self.velo_range['x'][1]-self.velo_range['x'][0]) - scan_points[i][0]) / self.resolution)
+            y = int(((self.velo_range['y'][1]-self.velo_range['y'][0])/2 - scan_points[i][1]) / self.resolution)
+            try:
+                to_be_saved[x][y] = 1
+            except:
+                pass
+        return to_be_saved
 
     def extract_sequence_2d(self):
         pass
@@ -171,6 +189,10 @@ class kitti:
         for filename in self.list_of_velo_files:
             scan = np.fromfile(filename, dtype=np.float32)
             yield scan.reshape((-1, 4))
+
+    def load_scan_point_from_file(self,filepath):
+        scan = np.fromfile(filepath, dtype=np.float32)
+        return scan.reshape((-1, 4))
 
     def load_tracklets_for_frames(self):
         """
@@ -240,7 +262,7 @@ class kitti:
 
                     cornerPosInVelo = np.dot(rotMat, trackletBox) + np.tile(translation, (8, 1)).T
 
-                    (cornerPosInVelo[1]) = ((cornerPosInVelo[1])) + abs(self.velo_range['y'][0])
+                    (cornerPosInVelo[1]) = ((cornerPosInVelo[1])) + (self.velo_range['y'][1]-self.velo_range['y'][0])/2
                     (cornerPosInVelo) = (cornerPosInVelo) / self.resolution
 
                     frame_tracklets[j+absoluteFrameNumber] = frame_tracklets[j+absoluteFrameNumber] + [cornerPosInVelo]
@@ -252,7 +274,10 @@ class kitti:
         return (frame_tracklets, frame_tracklets_types ,dims ,yawframe)
 
 
-dataset=kitti()
-dataset.build()
-print(len(dataset.annotation))
-#dataset.save_scan_points(')
+# dataset=kitti()
+# dataset.build()
+# print(dataset.annotation[0][0]['proj_velo_xmin'])
+# print(dataset.annotation[0][0]['proj_velo_ymin'])
+# print(dataset.annotation[0][0]['proj_velo_xmax'])
+# print(dataset.annotation[0][0]['proj_velo_ymax'])
+#
